@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Лабораторная работа №5</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        th,
+        td {
+            max-width: 150px;
+            border: 1px solid black;
+            padding: 8px;
+            text-align: left;
+            word-wrap: break-word;
+        }
+
+        .pagination {
+            margin-top: 10px;
+        }
+
+        .pagination a {
+            display: inline-block;
+            padding: 8px 16px;
+            text-decoration: none;
+            background-color: #f2f2f2;
+            color: black;
+            border: 1px solid #ddd;
+        }
+
+        .pagination a.active {
+            background-color: #4CAF50;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="pagination"></div>
+    <button id="startBtn">Начать загрузку</button>
+    <select id="filterField">
+        <option value="id">ID</option>
+        <option value="ip">IP</option>
+        <option value="date">Date</option>
+        <option value="type_request">Type Request</option>
+        <option value="link">Link</option>
+        <option value="version">Version</option>
+        <option value="code">Code</option>
+        <option value="size">Size</option>
+        <option value="reference">Reference</option>
+        <option value="ua">User Agent</option>
+    </select>
+    <button id="filterAscBtn">В большую сторону</button>
+    <button id="filterDescBtn">В меньшую сторону</button>
+    <table id="data-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>IP</th>
+                <th>Date</th>
+                <th>Type Request</th>
+                <th>Link</th>
+                <th>Version</th>
+                <th>Code</th>
+                <th>Size</th>
+                <th>Reference</th>
+                <th>User Agent</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    <div class="pagination"></div>
+    <script>
+        var data;
+        var currentPage = 1;
+        var rowsPerPage = 2000;
+
+        $(document).ready(function () {
+            $('#startBtn').click(function () {
+                startUpload();
+            });
+
+            $('#filterAscBtn').click(function () {
+                var field = $('#filterField').val();
+                data.sort(function (a, b) {
+                    if (a[field] < b[field]) {
+                        return -1;
+                    }
+                    if (a[field] > b[field]) {
+                        return 1;
+                    }
+                    return 0;
+                });
+                renderTable(currentPage);
+            });
+
+            $('#filterDescBtn').click(function () {
+                var field = $('#filterField').val();
+                data.sort(function (a, b) {
+                    if (a[field] > b[field]) {
+                        return -1;
+                    }
+                    if (a[field] < b[field]) {
+                        return 1;
+                    }
+                    return 0;
+                });
+                renderTable(currentPage);
+            });
+
+            function stopUpload() {
+                clearInterval(progressInterval);
+            }
+
+            function startUpload() {
+                $.ajax({
+                    url: 'filterload.php',
+                    type: 'GET',
+                    dataType: 'json',
+                    success: function (responseData) {
+                        console.log(responseData);
+                        data = responseData; // Сохраняем полученные данные в переменную data
+                        renderTable(currentPage); // Отображаем первую страницу таблицы
+                        renderPagination(); // Отображаем пагинацию
+                    },
+                    error: function (error) {
+                        console.error('Error fetching data:', error);
+                    }
+                });
+            }
+
+            function outputDataAsync(data, startIndex, endIndex) {
+                var tableBody = $('#data-table tbody');
+                tableBody.empty(); // Очищаем содержимое таблицы
+                for (var i = startIndex; i < endIndex; i++) {
+                    var item = data[i];
+                    var row = $('<tr></tr>');
+                    row.append('<td>' + item.id + '</td>');
+                    row.append('<td>' + convertHexToIP(item.ip) + '</td>');
+                    row.append('<td>' + item.date + '</td>');
+                    row.append('<td>' + item.type_request + '</td>');
+                    row.append('<td>' + item.link + '</td>');
+                    row.append('<td>' + item.version + '</td>');
+                    row.append('<td>' + item.code + '</td>');
+                    row.append('<td>' + item.size + '</td>');
+                    row.append('<td>' + item.reference + '</td>');
+                    row.append('<td>' + item.ua + '</td>');
+                    tableBody.append(row);
+                }
+            }
+
+            function renderTable(page) {
+                var startIndex = (page - 1) * rowsPerPage;
+                var endIndex = startIndex + rowsPerPage;
+                outputDataAsync(data, startIndex, endIndex);
+            }
+
+            function renderPagination() {
+                var totalPages = Math.ceil(data.length / rowsPerPage);
+                var pagination = $('.pagination');
+                pagination.empty(); // Очищаем содержимое пагинации
+
+                for (var i = 1; i <= totalPages; i++) {
+                    var link = $('<a href="#"></a>');
+                    link.text(i);
+                    if (i === currentPage) {
+                        link.addClass('active');
+                    }
+                    link.attr('data-page', i);
+                    pagination.append(link);
+                }
+
+                // Добавляем обработчик события для переключения страницы
+                pagination.find('a').click(function (event) {
+                    event.preventDefault();
+                    var page = parseInt($(this).attr('data-page'));
+                    currentPage = page;
+                    renderTable(currentPage);
+                    renderPagination();
+                    // Прокручиваем страницу вверх
+                    $('html, body').animate({ scrollTop: 0 }, 'fast');
+                });
+
+
+            }
+
+            //Конвертация IP из нестадартного вида в обычный
+            function convertHexToIP(hex) {
+                var ip = [];
+                for (var i = 0; i < 8; i += 2) {
+                    var octet = parseInt(hex.substr(i, 2), 16);
+                    ip.push(octet);
+                }
+                return ip.join('.');
+            }
+
+            // Вызов функции startUpload() при загрузке страницы
+            startUpload();
+        });
+    </script>
+</body>
+
+</html>
